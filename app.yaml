@@ -1,0 +1,13 @@
+kind: wasmer.io/App.v0
+name: wasmer-sqlx-demo
+package: .
+# Set this to your Wasmer account or namespace, or let `wasmer deploy` prompt.
+# owner: YOUR_WASMER_USERNAME
+capabilities:
+  database:
+    engine: mysql
+# Managed MySQL is only offered in some regions. Apps with a database must
+# name exactly one of those regions.
+locality:
+  regions:
+    - us-losa1
