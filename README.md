@@ -218,11 +218,13 @@ wasmer run target/wasm32-wasmer-wasi/release/wasmer-sqlx-demo.wasm \
 
 ## Native local development
 
-Useful while iterating on the API without the WASIX toolchain.
+Useful while iterating on the API without the WASIX toolchain. Starting MySQL is only the first step: the app still needs env vars, a TCP connection string, TLS turned off for local Docker, and `cargo run`.
 
-### 1. Start MySQL
+The process talks to MySQL over **TCP** (`127.0.0.1:3306`). It does **not** use a Unix socket. `mysql://…@127.0.0.1:3306/…` in `.env` is required; a socket path such as `/tmp/mysql.sock` will not be read.
 
-Example with Docker:
+### 1. Start MySQL with Docker
+
+This creates a container named `wasmer-sqlx-mysql`, a database `items_demo`, and a user `demo` / `demo`. Port `3306` on the host is forwarded to the server inside the container.
 
 ```bash
 docker run --name wasmer-sqlx-mysql \
@@ -234,24 +236,64 @@ docker run --name wasmer-sqlx-mysql \
   -d mysql:8
 ```
 
+If you already created that container, start it again instead of `docker run`:
+
+```bash
+docker start wasmer-sqlx-mysql
+```
+
+The image takes several seconds to initialize. Wait until it accepts TCP connections:
+
+```bash
+until docker exec wasmer-sqlx-mysql \
+  mysqladmin ping -h127.0.0.1 -uroot -proot --silent
+do
+  sleep 1
+done
+```
+
+You can confirm the demo user works from the host (TCP, not the socket):
+
+```bash
+docker exec wasmer-sqlx-mysql \
+  mysql -h127.0.0.1 -udemo -pdemo items_demo -e 'SELECT 1'
+```
+
+If host port `3306` is already taken, map another port (`-p 3307:3306`) and put that port in `DATABASE_URL`.
+
 ### 2. Configure the process
 
 ```bash
 cp .env.example .env
-# edit DATABASE_URL / PORT if needed
 ```
 
-### 3. Run
+`.env.example` already has values that match the container above:
+
+```bash
+DATABASE_URL=mysql://demo:demo@127.0.0.1:3306/items_demo
+PORT=3000
+BIND_ADDR=127.0.0.1
+DB_SSL_MODE=disabled
+```
+
+`DB_SSL_MODE=disabled` is required for this Docker image: it does not present a client TLS setup that matches Wasmer’s managed MySQL. Without it, SQLx may try `preferred` and fail the handshake.
+
+Without `PORT=3000`, `cargo run` binds `127.0.0.1:80` (the Edge default) and will fail unless you are root or something else is on port 80.
+
+### 3. Run the API
 
 ```bash
 cargo run
 ```
 
-The server listens on `127.0.0.1:80` by default (Wasmer Edge’s `PORT`). Locally set `PORT=3000` as in `.env.example`.
+The process opens a SQLx pool, creates `categories` / `items` if they are missing, seeds demo rows when the tables are empty, then listens on `http://127.0.0.1:3000`.
 
 ```bash
+curl -s http://127.0.0.1:3000/health
 curl -s http://127.0.0.1:3000/items
 ```
+
+`GET /items` should return the seeded rows, each with a `collection` object.
 
 ### 4. Tests
 
@@ -264,7 +306,9 @@ cargo test
 HTTP tests start a real listener and talk to MySQL. They skip (rather than fail) when `DATABASE_URL` or the Wasmer `DB_*` variables are missing, or when MySQL is unreachable.
 
 ```bash
-DATABASE_URL=mysql://demo:demo@127.0.0.1:3306/items_demo cargo test
+DATABASE_URL=mysql://demo:demo@127.0.0.1:3306/items_demo \
+  DB_SSL_MODE=disabled \
+  cargo test
 ```
 
 ## Environment variables
