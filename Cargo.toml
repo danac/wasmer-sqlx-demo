@@ -1,0 +1,39 @@
+[package]
+name = "wasmer-sqlx-demo"
+version = "0.1.0"
+edition = "2021"
+description = "Axum REST API for items and categories, using SQLx plus SeaORM on Wasmer Edge"
+license = "MIT"
+repository = "https://github.com/danac/wasmer-sqlx-demo"
+readme = "README.md"
+
+[dependencies]
+anyhow = "1"
+axum = { version = "0.8", features = ["json", "macros"] }
+dotenvy = "0.15"
+percent-encoding = "2"
+sea-orm = { version = "1.1", default-features = false, features = [
+    "macros",
+    "runtime-tokio-rustls",
+    "sqlx-mysql",
+] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sqlx = { version = "0.8", default-features = false, features = [
+    "mysql",
+    "runtime-tokio",
+    "tls-rustls",
+] }
+thiserror = "2"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+url = "2"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+[dev-dependencies]
+reqwest = { version = "0.12", default-features = false, features = [
+    "json",
+    "rustls-tls",
+] }
+serde_json = "1"
+tokio = { version = "1", features = ["full", "macros"] }
