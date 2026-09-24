@@ -10,4 +10,4 @@ capabilities:
 # name exactly one of those regions.
 locality:
   regions:
-    - us-losa1
+    - fr-roub1
