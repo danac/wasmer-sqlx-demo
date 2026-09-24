@@ -67,7 +67,8 @@ Install these on the machine you will build and deploy from:
 
    The WASIX Rust toolchain is downloaded the first time you run `cargo wasix build`.
 
-4. A [Wasmer](https://wasmer.io/) account.
+4. **lld**. `cargo wasix build` links with `lld`, which is not part of the Rust toolchain. On Debian/Ubuntu: `sudo apt install lld`.
+5. A [Wasmer](https://wasmer.io/) account.
 
 MySQL is **not** something you provision yourself on Edge. Wasmer creates one managed MySQL database for the app and injects connection settings.
 
@@ -275,7 +276,7 @@ DATABASE_URL=mysql://demo:demo@127.0.0.1:3306/items_demo cargo test
 1. `cargo fmt --all -- --check`
 2. `cargo clippy --all-targets --all-features -- -D warnings`
 3. `cargo test --all-features -- --test-threads=1` against a `mysql:8` service (`DB_SSL_MODE=required`)
-4. `cargo wasix build --release`
+4. `cargo wasix build --release` (the job installs `lld` first; the WASIX linker requires it)
 
 Pushes to `main` then deploy that module to Wasmer Edge. Pull requests do not deploy. The deploy job uses the `production` environment and:
 

@@ -106,6 +106,9 @@ jobs:
       - name: Install cargo-wasix
         run: cargo install cargo-wasix
 
+      - name: Install lld
+        run: sudo apt-get update && sudo apt-get install -y lld
+
       - name: Build WASIX module
         run: cargo wasix build --release
 
