@@ -125,7 +125,7 @@ cargo update
 cargo wasix build --release
 ```
 
-WASIX often needs the crate graph that the WASIX registry (or the `wasix-org` forks) can compile. `cargo-wasix` writes `.cargo/config.toml` on first use so later builds resolve those crates automatically.
+WASIX often needs the crate graph that the WASIX registry can compile. `.cargo/config.toml` is committed so `cargo test` and `cargo wasix build` both resolve `Cargo.lock`, including the `+wasix` crate versions, through `https://cargo-registry.wasix.org/`.
 
 ### 5. Deploy
 
@@ -268,6 +268,32 @@ HTTP tests start a real listener and talk to MySQL. They skip (rather than fail)
 DATABASE_URL=mysql://demo:demo@127.0.0.1:3306/items_demo cargo test
 ```
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on pull requests and on pushes to `main`:
+
+1. `cargo fmt --all -- --check`
+2. `cargo clippy --all-targets --all-features -- -D warnings`
+3. `cargo test --all-features -- --test-threads=1` against a `mysql:8` service (`DB_SSL_MODE=required`)
+4. `cargo wasix build --release`
+
+Pushes to `main` then deploy that module to Wasmer Edge. Pull requests do not deploy. The deploy job uses the `production` environment and:
+
+```bash
+wasmer deploy --owner "$WASMER_OWNER" --no-persist-id --non-interactive --bump
+```
+
+`--non-interactive` is required in CI because the CLI would otherwise prompt. `--bump` publishes a new package patch version when the registry already has `0.1.0` with different contents. `--no-persist-id` keeps `app_id` out of `app.yaml`. The runner may rewrite `app.yaml` and `wasmer.toml` during deploy; those edits stay on the runner.
+
+Add these secrets to the `production` environment (repository secrets also work):
+
+| Secret | Value |
+| --- | --- |
+| `WASMER_TOKEN` | Wasmer access token from [account access tokens](https://wasmer.io/settings/access-tokens) |
+| `WASMER_OWNER` | Wasmer username or namespace that should own the app |
+
+`owner` stays out of the committed `app.yaml`.
+
 ## Environment variables
 
 | Variable | Used when | Notes |
@@ -303,6 +329,8 @@ src/api.rs           Axum routes and handlers
 app.yaml             Wasmer Edge app + MySQL capability
 wasmer.toml          WASIX package pointing at the wasm module
 BUILD.md             commands `wasmer deploy` expects
+.github/workflows/ci.yml  test, WASIX build, and Edge deploy
+.cargo/config.toml   WASIX overlay registry used by Cargo.lock
 ```
 
 ## Notes for WASIX evaluation

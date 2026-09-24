@@ -1,0 +1,162 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  DATABASE_URL: mysql://demo:demo@127.0.0.1:3306/items_demo
+  # Docker mysql:8 enables TLS. required matches local development: encrypt
+  # without verifying the certificate. disabled cannot log in with
+  # caching_sha2_password on this build.
+  DB_SSL_MODE: required
+  RUST_BACKTRACE: 1
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_DATABASE: items_demo
+          MYSQL_USER: demo
+          MYSQL_PASSWORD: demo
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=20
+          --health-start-period=20s
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Run tests
+        run: cargo test --all-features -- --test-threads=1
+
+  wasix-build:
+    name: WASIX build
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-wasix-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-wasix-
+
+      - name: Cache WASIX toolchain
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.wasix
+            ~/.cargo/bin/cargo-wasix
+            .cargo
+          key: ${{ runner.os }}-wasix-toolchain-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-wasix-toolchain-
+
+      - name: Install cargo-wasix
+        run: cargo install cargo-wasix
+
+      - name: Build WASIX module
+        run: cargo wasix build --release
+
+      - name: Verify WASM artifact
+        run: |
+          test -f target/wasm32-wasmer-wasi/release/wasmer-sqlx-demo.wasm
+          ls -lh target/wasm32-wasmer-wasi/release/wasmer-sqlx-demo.wasm
+
+      - name: Upload WASM module
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasmer-sqlx-demo-wasm
+          path: target/wasm32-wasmer-wasi/release/wasmer-sqlx-demo.wasm
+          if-no-files-found: error
+          retention-days: 7
+
+  deploy:
+    name: Deploy to Wasmer Edge
+    runs-on: ubuntu-latest
+    needs: wasix-build
+    # Pull requests never deploy. Credentials live on the production environment.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment:
+      name: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download WASM module
+        uses: actions/download-artifact@v4
+        with:
+          name: wasmer-sqlx-demo-wasm
+          path: target/wasm32-wasmer-wasi/release
+
+      - name: Install Wasmer
+        run: |
+          curl https://get.wasmer.io -sSfL | sh
+          echo "$HOME/.wasmer/bin" >> "$GITHUB_PATH"
+
+      - name: Deploy
+        env:
+          WASMER_TOKEN: ${{ secrets.WASMER_TOKEN }}
+          WASMER_OWNER: ${{ secrets.WASMER_OWNER }}
+        run: |
+          if [ -z "$WASMER_TOKEN" ] || [ -z "$WASMER_OWNER" ]; then
+            echo "Add WASMER_TOKEN and WASMER_OWNER to the production environment (or as repository secrets)."
+            exit 1
+          fi
+          wasmer deploy \
+            --owner "$WASMER_OWNER" \
+            --no-persist-id \
+            --non-interactive \
+            --bump
