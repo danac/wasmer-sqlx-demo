@@ -224,7 +224,7 @@ The process talks to MySQL over **TCP** (`127.0.0.1:3306`). It does **not** use 
 
 ### 1. Start MySQL with Docker
 
-This creates a container named `wasmer-sqlx-mysql`, a database `items_demo`, and a user `demo` / `demo`. Port `3306` on the host is forwarded to the server inside the container.
+Docker does not infer MySQL from the flags. `mysql:8` is an image from Docker Hub that already contains MySQL Server 8. Its default process is `mysqld` (via the image `ENTRYPOINT` / `CMD`). The `-e MYSQL_*` variables are read by that image’s entrypoint on first boot to create `items_demo` and the `demo` user. `-p 3306:3306` only publishes the port the server already listens on; `--name` is just the container name.
 
 ```bash
 docker run --name wasmer-sqlx-mysql \
