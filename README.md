@@ -202,6 +202,42 @@ The Wasmer dashboard also has a Databases tab and a DB explorer.
 
 To rotate credentials after a leak, use **Rotate Credentials** on that tab. The app picks up the new `DB_USERNAME` / `DB_PASSWORD` without a new deployment.
 
+## Deploy from GitHub Actions
+
+Yes: the Wasmer CLI accepts a registry token, so a workflow can deploy without `wasmer login`. `.github/workflows/deploy-wasmer.yml` builds the WASIX module and runs:
+
+```bash
+wasmer deploy --non-interactive --publish-package --bump --owner "$WASMER_OWNER"
+```
+
+`WASMER_TOKEN` is read from the environment (never print it).
+
+### 1. Create a Wasmer API token
+
+1. Open [Wasmer access tokens](https://wasmer.io/settings/access-tokens).
+2. Create a token that can publish packages and deploy apps.
+3. Copy it once. Do not commit it, and do not paste it into a chat or the workflow file.
+
+### 2. Add GitHub repository secrets
+
+In the GitHub repo: **Settings → Secrets and variables → Actions**:
+
+| Secret | Value |
+| --- | --- |
+| `WASMER_TOKEN` | the token from the previous step |
+| `WASMER_OWNER` | your Wasmer username or namespace |
+
+### 3. Run the workflow
+
+- A push to `main` deploys.
+- **Actions → Deploy to Wasmer Edge → Run workflow** deploys the selected branch.
+
+The job installs Rust and `cargo-wasix`, runs `cargo wasix build --release`, then `wasmer deploy`. The first WASIX toolchain download can take a while.
+
+`--publish-package` is required in CI because `app.yaml` has `package: .` and there is nobody to answer the “publish this package?” prompt. `--bump` patches the package version so each run can publish again. `--owner` supplies the account that `app.yaml` leaves commented out.
+
+If you already connected this repository in the Wasmer dashboard (Import Git), pushes can deploy from that link instead. You do not need both; pick Actions **or** the dashboard Git integration.
+
 ## Run the WASIX binary locally
 
 After `cargo wasix build --release`:

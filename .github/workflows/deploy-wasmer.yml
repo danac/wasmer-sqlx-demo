@@ -1,0 +1,56 @@
+name: Deploy to Wasmer Edge
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check required secrets
+        env:
+          WASMER_TOKEN: ${{ secrets.WASMER_TOKEN }}
+          WASMER_OWNER: ${{ secrets.WASMER_OWNER }}
+        run: |
+          if [ -z "$WASMER_TOKEN" ]; then
+            echo "Set repository secret WASMER_TOKEN (Wasmer Settings → Access Tokens)."
+            exit 1
+          fi
+          if [ -z "$WASMER_OWNER" ]; then
+            echo "Set repository secret WASMER_OWNER to your Wasmer username or namespace."
+            exit 1
+          fi
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-wasix
+        run: cargo install cargo-wasix
+
+      - name: Build WASIX module
+        run: cargo wasix build --release
+
+      - name: Setup Wasmer
+        uses: wasmerio/setup-wasmer@v3.1
+
+      - name: Deploy
+        env:
+          WASMER_TOKEN: ${{ secrets.WASMER_TOKEN }}
+        run: |
+          wasmer deploy \
+            --non-interactive \
+            --publish-package \
+            --bump \
+            --owner "${{ secrets.WASMER_OWNER }}"
