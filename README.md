@@ -5,13 +5,13 @@ A small Axum REST API for evaluating **WASIX** deployments of Rust web backends 
 The app manages items and categories:
 
 - A **category** (also exposed as a *collection*) has a name.
-- An **item** has a name and belongs to one category.
+- An **item** has a name, belongs to one category, and has an `is_favourite` flag.
 
 On startup the process:
 
 1. Opens a **SQLx** MySQL pool (Wasmer injects `DB_*` credentials).
 2. Wraps that pool in **SeaORM** and uses SeaORM for all CRUD queries.
-3. Creates the `categories` and `items` tables if they do not exist.
+3. Creates the `categories` and `items` tables if they do not exist, and adds `items.is_favourite` when that column is missing.
 4. Inserts a handful of demo rows when the database is empty.
 
 The Tokio runtime is the multi-threaded scheduler (`#[tokio::main(flavor = "multi_thread")]`).
@@ -23,9 +23,9 @@ The Tokio runtime is the multi-threaded scheduler (`#[tokio::main(flavor = "mult
 | `GET` | `/` | Service index |
 | `GET` | `/health` | Liveness plus a SQLx `SELECT 1` |
 | `GET` | `/items` | **Items with the collection they belong to** |
-| `POST` | `/items` | Create an item `{ "name", "category_id" }` |
+| `POST` | `/items` | Create an item `{ "name", "category_id", "is_favourite"? }` |
 | `GET` | `/items/{id}` | One item, including its collection |
-| `PUT` | `/items/{id}` | Update name and/or `category_id` |
+| `PUT` | `/items/{id}` | Update name, `category_id`, and/or `is_favourite` |
 | `DELETE` | `/items/{id}` | Delete an item |
 | `GET` | `/categories` | List categories |
 | `POST` | `/categories` | Create `{ "name" }` |
@@ -44,6 +44,7 @@ The Tokio runtime is the multi-threaded scheduler (`#[tokio::main(flavor = "mult
     "id": 1,
     "name": "Mechanical Keyboard",
     "category_id": 1,
+    "is_favourite": true,
     "category": { "id": 1, "name": "Electronics" },
     "collection": { "id": 1, "name": "Electronics" }
   }
@@ -185,7 +186,7 @@ curl -s -X POST "$APP_URL/categories" \
 
 curl -s -X POST "$APP_URL/items" \
   -H 'content-type: application/json' \
-  -d '{"name":"Trowel","category_id":4}'
+  -d '{"name":"Trowel","category_id":4,"is_favourite":true}'
 ```
 
 `GET /items` is the required evaluation endpoint: each item includes the collection it belongs to.

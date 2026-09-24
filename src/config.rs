@@ -2,7 +2,7 @@ use std::env;
 use std::net::IpAddr;
 use std::str::FromStr;
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use percent_encoding::percent_decode_str;
 use sqlx::mysql::{MySqlConnectOptions, MySqlSslMode};
 

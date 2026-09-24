@@ -1,9 +1,9 @@
 use std::time::Duration;
 
 use anyhow::Context;
-use sea_orm::entity::prelude::*;
 use sea_orm::SqlxMySqlConnector;
-use sea_orm::{ActiveValue::Set, ConnectionTrait, DatabaseConnection, Schema};
+use sea_orm::entity::prelude::*;
+use sea_orm::{ActiveValue::Set, ConnectionTrait, DatabaseConnection, Schema, Statement};
 use sqlx::mysql::MySqlPoolOptions;
 
 use crate::config::DatabaseSettings;
@@ -68,9 +68,41 @@ async fn create_schema(db: &DatabaseConnection) -> Result<(), sea_orm::DbErr> {
     let mut items = schema.create_table_from_entity(item::Entity);
     items.if_not_exists();
     db.execute(&items).await?;
+    ensure_is_favourite_column(db).await?;
 
     tracing::info!("ensured categories and items tables exist");
     Ok(())
+}
+
+/// `CREATE TABLE IF NOT EXISTS` leaves an older `items` table unchanged.
+/// Add the column when a database was created before `is_favourite` existed.
+async fn ensure_is_favourite_column(db: &DatabaseConnection) -> Result<(), sea_orm::DbErr> {
+    let existing = db
+        .query_one_raw(Statement::from_string(
+            db.get_database_backend(),
+            "SELECT 1 AS present \
+             FROM information_schema.COLUMNS \
+             WHERE TABLE_SCHEMA = DATABASE() \
+               AND TABLE_NAME = 'items' \
+               AND COLUMN_NAME = 'is_favourite' \
+             LIMIT 1",
+        ))
+        .await?;
+    if existing.is_some() {
+        return Ok(());
+    }
+
+    match db
+        .execute_unprepared("ALTER TABLE items ADD COLUMN is_favourite bool NOT NULL DEFAULT FALSE")
+        .await
+    {
+        Ok(_) => {
+            tracing::info!("added items.is_favourite");
+            Ok(())
+        }
+        Err(err) if is_duplicate_column(&err) => Ok(()),
+        Err(err) => Err(err),
+    }
 }
 
 async fn seed_if_empty(db: &DatabaseConnection) -> Result<(), sea_orm::DbErr> {
@@ -90,11 +122,11 @@ async fn seed_if_empty(db: &DatabaseConnection) -> Result<(), sea_orm::DbErr> {
     let books = insert_category(db, "Books").await?;
     let kitchen = insert_category(db, "Kitchen").await?;
 
-    insert_item(db, "Mechanical Keyboard", electronics.id).await?;
-    insert_item(db, "Noise-cancelling Headphones", electronics.id).await?;
-    insert_item(db, "Dune", books.id).await?;
-    insert_item(db, "The Rust Programming Language", books.id).await?;
-    insert_item(db, "Cast Iron Skillet", kitchen.id).await?;
+    insert_item(db, "Mechanical Keyboard", electronics.id, true).await?;
+    insert_item(db, "Noise-cancelling Headphones", electronics.id, false).await?;
+    insert_item(db, "Dune", books.id, true).await?;
+    insert_item(db, "The Rust Programming Language", books.id, false).await?;
+    insert_item(db, "Cast Iron Skillet", kitchen.id, false).await?;
 
     tracing::info!("inserted demo categories and items");
     Ok(())
@@ -117,14 +149,21 @@ fn is_unique_violation(err: &sea_orm::DbErr) -> bool {
     message.contains("Duplicate") || message.contains("1062")
 }
 
+fn is_duplicate_column(err: &sea_orm::DbErr) -> bool {
+    let message = err.to_string();
+    message.contains("Duplicate column") || message.contains("1060")
+}
+
 async fn insert_item(
     db: &DatabaseConnection,
     name: &str,
     category_id: i32,
+    is_favourite: bool,
 ) -> Result<item::Model, sea_orm::DbErr> {
     item::ActiveModel {
         name: Set(name.to_owned()),
         category_id: Set(category_id),
+        is_favourite: Set(is_favourite),
         ..Default::default()
     }
     .insert(db)

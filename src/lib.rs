@@ -7,7 +7,7 @@ mod state;
 
 pub use api::build_router;
 pub use config::{
-    load_database_settings, load_settings, ssl_mode_for_host, AppSettings, DatabaseSettings,
+    AppSettings, DatabaseSettings, load_database_settings, load_settings, ssl_mode_for_host,
 };
 pub use db::{connect, ensure_schema_and_seed};
 pub use error::AppError;

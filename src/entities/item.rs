@@ -8,6 +8,8 @@ pub struct Model {
     #[sea_orm(column_type = "String(StringLen::N(255))")]
     pub name: String,
     pub category_id: i32,
+    #[sea_orm(default_value = false)]
+    pub is_favourite: bool,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

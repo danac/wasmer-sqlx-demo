@@ -32,6 +32,7 @@ pub struct ItemWithCollection {
     pub id: i32,
     pub name: String,
     pub category_id: i32,
+    pub is_favourite: bool,
     pub category: CategoryBody,
     /// Alias used by the evaluation GET: items include the collection they belong to.
     pub collection: CategoryBody,
@@ -44,6 +45,7 @@ impl ItemWithCollection {
             id: item.id,
             name: item.name,
             category_id: item.category_id,
+            is_favourite: item.is_favourite,
             collection: category.clone(),
             category,
         }
@@ -64,12 +66,16 @@ pub struct UpdateCategory {
 pub struct CreateItem {
     pub name: String,
     pub category_id: i32,
+    /// Omitted values are stored as `false`.
+    #[serde(default)]
+    pub is_favourite: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct UpdateItem {
     pub name: Option<String>,
     pub category_id: Option<i32>,
+    pub is_favourite: Option<bool>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -177,6 +183,7 @@ async fn create_item(
     let created = item::ActiveModel {
         name: Set(name),
         category_id: Set(body.category_id),
+        is_favourite: Set(body.is_favourite),
         ..Default::default()
     }
     .insert(&state.db)
@@ -203,6 +210,9 @@ async fn update_item(
     if let Some(category_id) = body.category_id {
         ensure_category_exists(&state.db, category_id).await?;
         active.category_id = Set(category_id);
+    }
+    if let Some(is_favourite) = body.is_favourite {
+        active.is_favourite = Set(is_favourite);
     }
     active.update(&state.db).await?;
     load_item_with_collection(&state.db, id).await.map(Json)
@@ -369,6 +379,7 @@ mod tests {
             id: 7,
             name: "Dune".into(),
             category_id: 2,
+            is_favourite: true,
         };
         let category = category::Model {
             id: 2,
@@ -379,5 +390,6 @@ mod tests {
         assert_eq!(json["collection"]["name"], "Books");
         assert_eq!(json["category"]["name"], "Books");
         assert_eq!(json["name"], "Dune");
+        assert_eq!(json["is_favourite"], true);
     }
 }

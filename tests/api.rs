@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 
 use reqwest::StatusCode;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use wasmer_sqlx_demo::{build_router, connect, ensure_schema_and_seed, load_database_settings};
 
 async fn spawn_app() -> Option<(String, reqwest::Client)> {
@@ -74,6 +74,7 @@ async fn health_and_item_list_include_collections() {
         assert_eq!(item["collection"]["id"], item["category"]["id"]);
         assert_eq!(item["collection"]["name"], item["category"]["name"]);
         assert!(!item["collection"]["name"].as_str().unwrap().is_empty());
+        assert!(item["is_favourite"].is_boolean());
     }
 }
 
@@ -97,7 +98,8 @@ async fn can_create_item_in_existing_collection() {
         .post(format!("{base}/items"))
         .json(&json!({
             "name": "API Test Gadget",
-            "category_id": category_id
+            "category_id": category_id,
+            "is_favourite": true
         }))
         .send()
         .await
@@ -105,8 +107,20 @@ async fn can_create_item_in_existing_collection() {
     assert_eq!(created.status(), StatusCode::CREATED);
     let body: Value = created.json().await.unwrap();
     assert_eq!(body["name"], "API Test Gadget");
+    assert_eq!(body["is_favourite"], true);
     assert_eq!(body["collection"]["id"], category_id);
     let item_id = body["id"].as_i64().unwrap();
+
+    let updated = client
+        .put(format!("{base}/items/{item_id}"))
+        .json(&json!({ "is_favourite": false }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(updated.status(), StatusCode::OK);
+    let updated_body: Value = updated.json().await.unwrap();
+    assert_eq!(updated_body["is_favourite"], false);
+    assert_eq!(updated_body["name"], "API Test Gadget");
 
     let listed: Vec<Value> = client
         .get(format!("{base}/items"))
