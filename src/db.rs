@@ -34,10 +34,27 @@ pub async fn ensure_schema_and_seed(state: &AppState) -> anyhow::Result<()> {
     create_schema(&state.db)
         .await
         .context("failed to create database schema")?;
-    seed_if_empty(&state.db)
+
+    // GET_LOCK is connection-scoped. Hold one SQLx connection so concurrent
+    // workers (or parallel tests) cannot race the empty-table seed.
+    let mut lock = state
+        .pool
+        .acquire()
         .await
-        .context("failed to insert demo data")?;
-    Ok(())
+        .context("failed to acquire a MySQL connection for the seed lock")?;
+    sqlx::query("SELECT GET_LOCK('wasmer_sqlx_demo_seed', 30)")
+        .execute(&mut *lock)
+        .await
+        .context("failed to take the demo-data seed lock")?;
+
+    let seed_result = seed_if_empty(&state.db)
+        .await
+        .context("failed to insert demo data");
+
+    let _ = sqlx::query("SELECT RELEASE_LOCK('wasmer_sqlx_demo_seed')")
+        .execute(&mut *lock)
+        .await;
+    seed_result
 }
 
 async fn create_schema(db: &DatabaseConnection) -> Result<(), sea_orm::DbErr> {
@@ -62,7 +79,14 @@ async fn seed_if_empty(db: &DatabaseConnection) -> Result<(), sea_orm::DbErr> {
         return Ok(());
     }
 
-    let electronics = insert_category(db, "Electronics").await?;
+    let electronics = match insert_category(db, "Electronics").await {
+        Ok(model) => model,
+        Err(err) if is_unique_violation(&err) => {
+            tracing::info!("demo seed already applied by another worker");
+            return Ok(());
+        }
+        Err(err) => return Err(err),
+    };
     let books = insert_category(db, "Books").await?;
     let kitchen = insert_category(db, "Kitchen").await?;
 
@@ -86,6 +110,11 @@ async fn insert_category(
     }
     .insert(db)
     .await
+}
+
+fn is_unique_violation(err: &sea_orm::DbErr) -> bool {
+    let message = err.to_string();
+    message.contains("Duplicate") || message.contains("1062")
 }
 
 async fn insert_item(
