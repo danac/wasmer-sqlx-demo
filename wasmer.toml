@@ -1,0 +1,22 @@
+[package]
+name = "wasmer-sqlx-demo"
+version = "0.1.0"
+description = "Axum REST API using SQLx and SeaORM against Wasmer managed MySQL"
+license = "MIT"
+readme = "./README.md"
+repository = "https://github.com/danac/wasmer-sqlx-demo"
+entrypoint = "wasmer-sqlx-demo"
+wasmer-extra-flags = "--net --enable-threads --enable-bulk-memory"
+
+[[module]]
+name = "wasmer-sqlx-demo"
+source = "target/wasm32-wasmer-wasi/release/wasmer-sqlx-demo.wasm"
+abi = "wasi"
+
+[[command]]
+name = "wasmer-sqlx-demo"
+module = "wasmer-sqlx-demo"
+runner = "wasi"
+
+[command.annotations.wasi]
+env = ["PORT=80"]
