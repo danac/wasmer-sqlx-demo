@@ -63,11 +63,11 @@ async fn create_schema(db: &DatabaseConnection) -> Result<(), sea_orm::DbErr> {
 
     let mut categories = schema.create_table_from_entity(category::Entity);
     categories.if_not_exists();
-    db.execute(backend.build(&categories)).await?;
+    db.execute(&categories).await?;
 
     let mut items = schema.create_table_from_entity(item::Entity);
     items.if_not_exists();
-    db.execute(backend.build(&items)).await?;
+    db.execute(&items).await?;
 
     tracing::info!("ensured categories and items tables exist");
     Ok(())
