@@ -89,15 +89,9 @@ git clone https://github.com/danac/wasmer-sqlx-demo.git
 cd wasmer-sqlx-demo
 ```
 
-### 3. Set the app owner (first deploy only)
+### 3. Choose the app owner (first deploy only)
 
-`app.yaml` is the Edge app manifest. Uncomment and set `owner` to your Wasmer username or namespace:
-
-```yaml
-owner: YOUR_WASMER_USERNAME
-```
-
-You can also leave it unset and answer the prompt from `wasmer deploy`.
+`app.yaml` is the shared Edge app manifest. Leave `owner` commented out. It identifies your Wasmer account, so it does not belong in the committed file. Pass it on the command line in the deploy step below, or leave it unset and answer the prompt from `wasmer deploy`.
 
 Optionally change:
 
@@ -135,8 +129,12 @@ WASIX often needs the crate graph that the WASIX registry (or the `wasix-org` fo
 ### 5. Deploy
 
 ```bash
-wasmer deploy
+wasmer deploy --owner YOUR_WASMER_USERNAME --no-persist-id
 ```
+
+`--owner` selects the account without writing it into `app.yaml`. `--no-persist-id` stops the CLI from adding `app_id`. Later deploys still update the same app, because the name `wasmer-sqlx-demo` already exists under that owner.
+
+A plain `wasmer deploy` appends `owner` and `app_id` to the bottom of `app.yaml`. Delete those two lines before committing. Keep `app.yaml` in git: the database capability, region, and package are the shared manifest. Do not gitignore the whole file.
 
 On the first deploy Wasmer will:
 
@@ -211,10 +209,12 @@ wasmer run target/wasm32-wasmer-wasi/release/wasmer-sqlx-demo.wasm \
   --net \
   --env PORT=3000 \
   --env DATABASE_URL=mysql://demo:demo@127.0.0.1:3306/items_demo \
-  --env DB_SSL_MODE=disabled
+  --env DB_SSL_MODE=required
 ```
 
 `--net` and threads (`wasmer-extra-flags` in `wasmer.toml`) are required for the multi-threaded Tokio server and outbound MySQL. The guest still needs a reachable MySQL server (local or remote).
+
+Use `DB_SSL_MODE=required` against the Docker `mysql:8` server. That image turns TLS on by itself. `required` encrypts the connection and does not verify the certificate, which is the same mode Wasmer Edge uses. `disabled` fails: MySQL 8's default `caching_sha2_password` login then needs an RSA password exchange, and this build does not include SQLx's `mysql-rsa` feature.
 
 ## Native local development
 
@@ -273,7 +273,7 @@ DATABASE_URL=mysql://demo:demo@127.0.0.1:3306/items_demo cargo test
 | --- | --- | --- |
 | `DATABASE_URL` | Local / WASIX-on-your-machine | `mysql://user:pass@host:port/db` |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD` | Wasmer Edge | Injected by the platform |
-| `DB_SSL_MODE` | Optional override | `disabled`, `preferred`, `required`, `verify_ca`, `verify_identity`. Default is `required` for `db.*` / `*wasmer*` hosts, otherwise `preferred`. |
+| `DB_SSL_MODE` | Optional override | `disabled`, `preferred`, `required`, `verify_ca`, `verify_identity`. Default is `required` for `db.*` / `*wasmer*` hosts, otherwise `preferred`. For local Docker MySQL 8, set `required`. `disabled` cannot log in with `caching_sha2_password` unless the client is built with SQLx `mysql-rsa`. |
 | `PORT` | Always | Default `80` for Edge |
 | `BIND_ADDR` | Optional | Default `127.0.0.1` (what Edge proxies to) |
 
