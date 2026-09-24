@@ -140,7 +140,7 @@ async fn index() -> Json<IndexResponse> {
 async fn health(State(state): State<AppState>) -> Result<Json<HealthResponse>, AppError> {
     sqlx::query("SELECT 1").execute(&state.pool).await?;
     Ok(Json(HealthResponse {
-        status: "spinning",
+        status: "ok",
         database: "up",
     }))
 }
